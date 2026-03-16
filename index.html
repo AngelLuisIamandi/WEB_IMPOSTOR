@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Juego del Impostor</title>
+    <link rel="icon" type="image/png" href="/IMG/icono2.png">
+
+    <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #2c3e50;
+            background-image: url('/IMG/back.jpg');
+            background-position: center;
+            background-repeat: no-repeat;
+            background-size: cover;
+            color: white;
+            text-align: center;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 20px;
+            overflow: hidden;
+        }
+
+        .container {
+            background: rgba(30, 40, 50, 0.85);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            padding: 2.5rem;
+            border-radius: 20px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.5);
+            width: 90%;
+            max-width: 400px;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+        h1 {
+            color: #f1c40f;
+            margin-top: 0;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+            font-weight: 800;
+            letter-spacing: 1px;
+        }
+
+        h2 {
+            font-weight: 400;
+        }
+
+        input {
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 12px;
+            background: rgba(0, 0, 0, 0.3);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: white;
+            width: 100%;
+            box-sizing: border-box;
+            font-size: 1rem;
+            outline: none;
+        }
+
+        button {
+            padding: 15px;
+            margin: 10px 0;
+            border-radius: 12px;
+            border: none;
+            width: 100%;
+            cursor: pointer;
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: white;
+            background: linear-gradient(135deg, #e74c3c 0%, #c0392b 100%);
+            box-shadow: 0 4px 15px rgba(231, 76, 60, 0.4);
+            transition: transform 0.2s;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+        }
+
+        .btn-blue {
+            background: linear-gradient(135deg, #3498db 0%, #2980b9 100%);
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        #role-display {
+            font-size: 1.5rem;
+            font-weight: bold;
+            margin: 20px 0;
+            padding: 20px;
+            background: rgba(0, 0, 0, 0.2);
+            border: 2px dashed #7f8c8d;
+            border-radius: 10px;
+        }
+
+        .role-impostor {
+            color: #e74c3c;
+        }
+
+        .role-citizen {
+            color: #2ecc71;
+        }
+
+        #lobby-list {
+            list-style: none;
+            padding: 0;
+            text-align: left;
+            max-height: 150px;
+            overflow-y: auto;
+        }
+
+        #lobby-list li {
+            background: rgba(255, 255, 255, 0.1);
+            margin-bottom: 5px;
+            padding: 8px;
+            border-radius: 5px;
+        }
+
+        /* --- ESTILOS DEL FOOTER --- */
+        .footer {
+            position: fixed;
+            bottom: 15px;
+            left: 0;
+            width: 100%;
+            text-align: center;
+            font-size: 0.9rem;
+            color: rgba(255, 255, 255, 0.5);
+            z-index: 1000;
+            pointer-events: none;
+        }
+
+        .footer a {
+            color: #f1c40f;
+            text-decoration: none;
+            font-weight: bold;
+            pointer-events: auto;
+            transition: color 0.3s ease, text-shadow 0.3s ease;
+        }
+
+        .footer a:hover {
+            color: #ffffff;
+            text-shadow: 0 0 10px #f1c40f;
+            cursor: pointer;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container">
+
+        <div id="screen-menu">
+            <h1>El Impostor</h1>
+            <p>¿Cómo quieres jugar hoy?</p>
+            <button onclick="modeOffline()">📱 Pasar el Móvil (Offline)</button>
+            <button class="btn-blue" onclick="modeOnline()">🌐 Multijugador (Online)</button>
+        </div>
+
+        <div id="screen-setup-offline" class="hidden">
+            <h1>Modo Offline</h1>
+            <input type="text" id="player-names" placeholder="Ana, Luis, Pedro..." value="Ana, Luis, Pedro">
+            <button onclick="startOfflineGame()">Empezar</button>
+            <button class="btn-blue" onclick="goBack()">Volver</button>
+        </div>
+        <div id="screen-pass" class="hidden">
+            <h1>¡Atención!</h1>
+            <p>Pasa el dispositivo a:</p>
+            <h2 id="current-player-name" style="color:#f1c40f">Nombre</h2>
+            <button onclick="revealRoleOffline()">Ver mi Rol</button>
+        </div>
+
+        <div id="screen-setup-online" class="hidden">
+            <h1>Modo Online</h1>
+            <input type="text" id="online-name" placeholder="Tu Nombre">
+            <input type="text" id="room-code" placeholder="Código de Sala (Ej: 1234)">
+            <button class="btn-blue" onclick="joinOnlineRoom()">Entrar a la Sala</button>
+            <button onclick="goBack()">Volver</button>
+        </div>
+
+        <div id="screen-lobby" class="hidden">
+            <h1>Sala de Espera</h1>
+            <h3 id="room-display">Sala: ---</h3>
+            <ul id="lobby-list"></ul>
+            <div id="host-controls">
+                <p style="font-size: 0.8rem">Esperando al anfitrión...</p>
+            </div>
+        </div>
+
+        <div id="screen-reveal" class="hidden">
+            <p>Tu rol es:</p>
+            <div id="role-display">???</div>
+            <p id="role-subtext" style="font-size: 0.9rem; opacity: 0.8;">Memorízalo.</p>
+            <button id="btn-hide-role">Continuar</button>
+        </div>
+
+        <div id="screen-game" class="hidden">
+            <h1>¡A Jugar!</h1>
+            <div id="timer" style="font-size: 3rem; font-weight: bold; color: #e74c3c; margin: 20px 0;">03:00</div>
+            <p>Empieza hablando:</p>
+            <h2 id="first-player" style="color:#f1c40f"></h2>
+            <button onclick="goBack()">Salir</button>
+        </div>
+
+        <div class="footer">
+            Creado por <a href="https://www.linkedin.com/in/angel-luis-iamandi-02b558383/" target="_blank">Ángel</a>
+        </div>
+
+    </div>
+
+    <script>
+        // === CONFIGURACIÓN ===
+        const words = [
+            // --- LUGARES ---
+            "Playa", "Hospital", "Biblioteca", "Cine", "Cementerio", "Cárcel",
+            "Aeropuerto", "Gimnasio", "Supermercado", "Escuela", "Discoteca",
+            "Iglesia", "Museo", "Zoológico", "Marte", "Piscina", "Ascensor",
+            "Baño Público", "Sauna", "Restaurante de Lujo", "Granja", "Castillo",
+
+            // --- COMIDA ---
+            "Pizza", "Sushi", "Paella", "Hamburguesa", "Helado", "Chocolate",
+            "Cerveza", "Café", "Palomitas", "Ensalada", "Tacos", "Huevo Frito",
+            "Sopa", "Pastel de Cumpleaños", "Ketchup", "Spaghetti",
+
+            // --- OBJETOS / TECNOLOGÍA ---
+            "Internet", "Iphone", "Televisión", "Microondas", "Espejo", "Cama",
+            "Papel Higiénico", "Cepillo de Dientes", "Guitarra", "Paraguas",
+            "Zapatos", "Gafas de Sol", "Reloj", "Anillo de Bodas", "Mochila",
+            "Cuchillo", "Sartén", "Mando a Distancia",
+
+            // --- ANIMALES ---
+            "Elefante", "Perro", "Gato", "Tiburón", "Pingüino", "Jirafa",
+            "Mosquito", "Dinosaurio", "Dragón", "Unicornio", "Vaca", "Ratón",
+            "Serpiente", "Murciélago", "León",
+
+            // --- PERSONAJES / PROFESIONES ---
+            "Batman", "Santa Claus", "Harry Potter", "Presidente", "Payaso",
+            "Fantasma", "Vampiro", "Zombi", "Alien", "Policía", "Bombero",
+            "Mime", "Youtuber", "Futbolista", "Astronauta", "Pirata", "Ninja",
+
+            // --- EVENTOS / COSAS ---
+            "Titanic", "Navidad", "Halloween", "Boda", "Divorcio", "Examen",
+            "Guerra", "Apocalipsis", "Coronavirus", "Lotería", "Black Friday",
+            "Fútbol", "Youtube", "Netflix", "Wifi"
+        ];
+        let timerInterval;
+        const screens = {
+            menu: document.getElementById('screen-menu'),
+            setupOff: document.getElementById('screen-setup-offline'),
+            pass: document.getElementById('screen-pass'),
+            setupOn: document.getElementById('screen-setup-online'),
+            lobby: document.getElementById('screen-lobby'),
+            reveal: document.getElementById('screen-reveal'),
+            game: document.getElementById('screen-game')
+        };
+
+        let players = [], currentPlayerIndex = 0, secretWord = "", impostorIndex = -1;
+        let socket, myName = "", myRoom = "", onlinePlayers = [];
+
+        function showScreen(screen) {
+            Object.values(screens).forEach(s => s.classList.add('hidden'));
+            screen.classList.remove('hidden');
+        }
+        function goBack() {
+            clearInterval(timerInterval);
+            showScreen(screens.menu);
+            if (socket) socket.disconnect();
+            onlinePlayers = [];
+            document.getElementById('lobby-list').innerHTML = "";
+        }
+        function modeOffline() { showScreen(screens.setupOff); }
+        function modeOnline() { showScreen(screens.setupOn); }
+
+        // ================== OFFLINE ==================
+        function startOfflineGame() {
+            players = document.getElementById('player-names').value.split(',').map(n => n.trim()).filter(n => n);
+            if (players.length < 3) return alert("Min 3 jugadores");
+            secretWord = words[Math.floor(Math.random() * words.length)];
+            impostorIndex = Math.floor(Math.random() * players.length);
+            currentPlayerIndex = 0;
+            showPassScreen();
+        }
+        function showPassScreen() {
+            if (currentPlayerIndex < players.length) {
+                document.getElementById('current-player-name').textContent = players[currentPlayerIndex];
+                showScreen(screens.pass);
+            } else startGameUI(players[Math.floor(Math.random() * players.length)]);
+        }
+        function revealRoleOffline() {
+            showScreen(screens.reveal);
+            const txt = document.getElementById('role-display');
+            document.getElementById('btn-hide-role').onclick = () => { currentPlayerIndex++; showPassScreen(); };
+
+            if (currentPlayerIndex === impostorIndex) {
+                txt.textContent = "ERES EL IMPOSTOR"; txt.className = "role-impostor";
+            } else {
+                txt.textContent = secretWord; txt.className = "role-citizen";
+            }
+        }
+
+        // ================== ONLINE (MEJORADO) ==================
+        function joinOnlineRoom() {
+            myName = document.getElementById('online-name').value.trim();
+            myRoom = document.getElementById('room-code').value.trim();
+            if (!myName || !myRoom) return alert("Faltan datos");
+
+            // CAMBIA ESTO POR TU URL DE RENDER
+            const BACKEND_URL = import.meta.env.BACKEND_URL;
+            socket = io(BACKEND_URL, { transports: ['websocket', 'polling'] });
+
+            showScreen(screens.lobby);
+            document.getElementById('room-display').textContent = "Sala: " + myRoom;
+
+            socket.on('connect', () => {
+                sendData('JOIN', { name: myName, id: socket.id });
+            });
+
+            socket.on('mensaje_chat', (data) => {
+                if (data.room !== myRoom) return;
+
+                if (data.type === 'JOIN') {
+                    addOnlinePlayer(data.payload.id, data.payload.name);
+                    sendData('I_AM_HERE', { name: myName, id: socket.id });
+
+                } else if (data.type === 'I_AM_HERE') {
+                    addOnlinePlayer(data.payload.id, data.payload.name);
+
+                } else if (data.type === 'GAME_ROLE') {
+                    handleReceiveRole(data.payload);
+
+                } else if (data.type === 'SYNC_START') {
+                    startGameUI(data.payload.starter);
+                }
+            });
+        }
+
+        function sendData(type, payload, targetId = null) {
+            socket.emit('mensaje_chat', {
+                room: myRoom,
+                type: type,
+                payload: payload,
+                targetId: targetId
+            });
+        }
+
+        function addOnlinePlayer(id, name) {
+            if (onlinePlayers.some(p => p.id === id)) return;
+
+            onlinePlayers.push({ id, name });
+
+            const list = document.getElementById('lobby-list');
+            const li = document.createElement('li');
+            li.textContent = name;
+            list.appendChild(li);
+
+            if (onlinePlayers[0].id === socket.id) {
+                document.getElementById('host-controls').innerHTML = `<button onclick="hostStartGame()">¡Repartir Cartas!</button>`;
+            }
+        }
+
+        // LÓGICA DEL ANFITRION (SEGURIDAD)
+        function hostStartGame() {
+            if (onlinePlayers.length < 3) return alert("Min 3 jugadores");
+
+            const selectedWord = words[Math.floor(Math.random() * words.length)];
+            const impostor = onlinePlayers[Math.floor(Math.random() * onlinePlayers.length)];
+            const starter = onlinePlayers[Math.floor(Math.random() * onlinePlayers.length)].name;
+
+            onlinePlayers.forEach(player => {
+                let roleData;
+
+                if (player.id === impostor.id) {
+                    roleData = { isImpostor: true, word: null };
+                } else {
+                    roleData = { isImpostor: false, word: selectedWord };
+                }
+
+                sendData('GAME_ROLE', roleData, player.id);
+            });
+
+            setTimeout(() => {
+                sendData('SYNC_START', { starter: starter });
+            }, 3000);
+        }
+
+        function handleReceiveRole(data) {
+            showScreen(screens.reveal);
+            const txt = document.getElementById('role-display');
+            const btn = document.getElementById('btn-hide-role');
+
+            if (data.isImpostor) {
+                txt.textContent = "ERES EL IMPOSTOR";
+                txt.className = "role-impostor";
+            } else {
+                txt.textContent = data.word;
+                txt.className = "role-citizen";
+            }
+
+            btn.textContent = "Esperando inicio...";
+            btn.onclick = null;
+        }
+
+        // ================== COMÚN ==================
+        function startGameUI(starterName) {
+            showScreen(screens.game);
+            document.getElementById('first-player').textContent = starterName;
+            startTimer();
+        }
+
+        function startTimer() {
+            let t = 180;
+            const disp = document.getElementById('timer');
+            disp.textContent = "03:00";
+            clearInterval(timerInterval);
+            timerInterval = setInterval(() => {
+                t--;
+                const m = Math.floor(t / 60).toString().padStart(2, '0');
+                const s = (t % 60).toString().padStart(2, '0');
+                disp.textContent = `${m}:${s}`;
+                if (t <= 0) { clearInterval(timerInterval); disp.textContent = "¡VOTACIÓN!"; }
+            }, 1000);
+        }
+    </script>
+
+</body>
+
+</html>
