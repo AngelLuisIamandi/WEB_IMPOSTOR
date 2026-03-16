@@ -308,127 +308,142 @@
         }
 
         // ================== ONLINE (MEJORADO) ==================
-        function joinOnlineRoom() {
+        async function joinOnlineRoom() {
             myName = document.getElementById('online-name').value.trim();
             myRoom = document.getElementById('room-code').value.trim();
             if (!myName || !myRoom) return alert("Faltan datos");
 
-            // CAMBIA ESTO POR TU URL DE RENDER
-            const BACKEND_URL = import.meta.env.BACKEND_URL;
-            socket = io(BACKEND_URL, { transports: ['websocket', 'polling'] });
+            try {
+                // 1. Pedimos la URL a nuestra mini-API de Vercel
+                const response = await fetch('/api/get-config');
+                const config = await response.json();
+                const BACKEND_URL = config.backendUrl;
 
-            showScreen(screens.lobby);
-            document.getElementById('room-display').textContent = "Sala: " + myRoom;
-
-            socket.on('connect', () => {
-                sendData('JOIN', { name: myName, id: socket.id });
-            });
-
-            socket.on('mensaje_chat', (data) => {
-                if (data.room !== myRoom) return;
-
-                if (data.type === 'JOIN') {
-                    addOnlinePlayer(data.payload.id, data.payload.name);
-                    sendData('I_AM_HERE', { name: myName, id: socket.id });
-
-                } else if (data.type === 'I_AM_HERE') {
-                    addOnlinePlayer(data.payload.id, data.payload.name);
-
-                } else if (data.type === 'GAME_ROLE') {
-                    handleReceiveRole(data.payload);
-
-                } else if (data.type === 'SYNC_START') {
-                    startGameUI(data.payload.starter);
+                if (!BACKEND_URL) {
+                    throw new Error("La URL del backend no está configurada en Vercel");
                 }
-            });
+
+                // 2. Conectamos con la URL obtenida
+                socket = io(BACKEND_URL, {
+                    transports: ['websocket', 'polling']
+                });
+
+                showScreen(screens.lobby);
+                document.getElementById('room-display').textContent = "Sala: " + myRoom;
+
+                socket.on('connect', () => {
+                    sendData('JOIN', { name: myName, id: socket.id });
+                });
+
+                socket.on('mensaje_chat', (data) => {
+                    if (data.room !== myRoom) return;
+
+                    if (data.type === 'JOIN') {
+                        addOnlinePlayer(data.payload.id, data.payload.name);
+                        sendData('I_AM_HERE', { name: myName, id: socket.id });
+
+                    } else if (data.type === 'I_AM_HERE') {
+                        addOnlinePlayer(data.payload.id, data.payload.name);
+
+                    } else if (data.type === 'GAME_ROLE') {
+                        handleReceiveRole(data.payload);
+
+                    } else if (data.type === 'SYNC_START') {
+                        startGameUI(data.payload.starter);
+                    }
+                });
+            } catch (error) {
+                console.error("Error de configuración:", error);
+                alert("No se pudo conectar al servidor. Revisa las variables en Vercel.");
+            }
         }
 
         function sendData(type, payload, targetId = null) {
-            socket.emit('mensaje_chat', {
-                room: myRoom,
-                type: type,
-                payload: payload,
-                targetId: targetId
-            });
-        }
-
-        function addOnlinePlayer(id, name) {
-            if (onlinePlayers.some(p => p.id === id)) return;
-
-            onlinePlayers.push({ id, name });
-
-            const list = document.getElementById('lobby-list');
-            const li = document.createElement('li');
-            li.textContent = name;
-            list.appendChild(li);
-
-            if (onlinePlayers[0].id === socket.id) {
-                document.getElementById('host-controls').innerHTML = `<button onclick="hostStartGame()">¡Repartir Cartas!</button>`;
+                socket.emit('mensaje_chat', {
+                    room: myRoom,
+                    type: type,
+                    payload: payload,
+                    targetId: targetId
+                });
             }
-        }
 
-        // LÓGICA DEL ANFITRION (SEGURIDAD)
-        function hostStartGame() {
-            if (onlinePlayers.length < 3) return alert("Min 3 jugadores");
+            function addOnlinePlayer(id, name) {
+                if (onlinePlayers.some(p => p.id === id)) return;
 
-            const selectedWord = words[Math.floor(Math.random() * words.length)];
-            const impostor = onlinePlayers[Math.floor(Math.random() * onlinePlayers.length)];
-            const starter = onlinePlayers[Math.floor(Math.random() * onlinePlayers.length)].name;
+                onlinePlayers.push({ id, name });
 
-            onlinePlayers.forEach(player => {
-                let roleData;
+                const list = document.getElementById('lobby-list');
+                const li = document.createElement('li');
+                li.textContent = name;
+                list.appendChild(li);
 
-                if (player.id === impostor.id) {
-                    roleData = { isImpostor: true, word: null };
+                if (onlinePlayers[0].id === socket.id) {
+                    document.getElementById('host-controls').innerHTML = `<button onclick="hostStartGame()">¡Repartir Cartas!</button>`;
+                }
+            }
+
+            // LÓGICA DEL ANFITRION (SEGURIDAD)
+            function hostStartGame() {
+                if (onlinePlayers.length < 3) return alert("Min 3 jugadores");
+
+                const selectedWord = words[Math.floor(Math.random() * words.length)];
+                const impostor = onlinePlayers[Math.floor(Math.random() * onlinePlayers.length)];
+                const starter = onlinePlayers[Math.floor(Math.random() * onlinePlayers.length)].name;
+
+                onlinePlayers.forEach(player => {
+                    let roleData;
+
+                    if (player.id === impostor.id) {
+                        roleData = { isImpostor: true, word: null };
+                    } else {
+                        roleData = { isImpostor: false, word: selectedWord };
+                    }
+
+                    sendData('GAME_ROLE', roleData, player.id);
+                });
+
+                setTimeout(() => {
+                    sendData('SYNC_START', { starter: starter });
+                }, 3000);
+            }
+
+            function handleReceiveRole(data) {
+                showScreen(screens.reveal);
+                const txt = document.getElementById('role-display');
+                const btn = document.getElementById('btn-hide-role');
+
+                if (data.isImpostor) {
+                    txt.textContent = "ERES EL IMPOSTOR";
+                    txt.className = "role-impostor";
                 } else {
-                    roleData = { isImpostor: false, word: selectedWord };
+                    txt.textContent = data.word;
+                    txt.className = "role-citizen";
                 }
 
-                sendData('GAME_ROLE', roleData, player.id);
-            });
-
-            setTimeout(() => {
-                sendData('SYNC_START', { starter: starter });
-            }, 3000);
-        }
-
-        function handleReceiveRole(data) {
-            showScreen(screens.reveal);
-            const txt = document.getElementById('role-display');
-            const btn = document.getElementById('btn-hide-role');
-
-            if (data.isImpostor) {
-                txt.textContent = "ERES EL IMPOSTOR";
-                txt.className = "role-impostor";
-            } else {
-                txt.textContent = data.word;
-                txt.className = "role-citizen";
+                btn.textContent = "Esperando inicio...";
+                btn.onclick = null;
             }
 
-            btn.textContent = "Esperando inicio...";
-            btn.onclick = null;
-        }
+            // ================== COMÚN ==================
+            function startGameUI(starterName) {
+                showScreen(screens.game);
+                document.getElementById('first-player').textContent = starterName;
+                startTimer();
+            }
 
-        // ================== COMÚN ==================
-        function startGameUI(starterName) {
-            showScreen(screens.game);
-            document.getElementById('first-player').textContent = starterName;
-            startTimer();
-        }
-
-        function startTimer() {
-            let t = 180;
-            const disp = document.getElementById('timer');
-            disp.textContent = "03:00";
-            clearInterval(timerInterval);
-            timerInterval = setInterval(() => {
-                t--;
-                const m = Math.floor(t / 60).toString().padStart(2, '0');
-                const s = (t % 60).toString().padStart(2, '0');
-                disp.textContent = `${m}:${s}`;
-                if (t <= 0) { clearInterval(timerInterval); disp.textContent = "¡VOTACIÓN!"; }
-            }, 1000);
-        }
+            function startTimer() {
+                let t = 180;
+                const disp = document.getElementById('timer');
+                disp.textContent = "03:00";
+                clearInterval(timerInterval);
+                timerInterval = setInterval(() => {
+                    t--;
+                    const m = Math.floor(t / 60).toString().padStart(2, '0');
+                    const s = (t % 60).toString().padStart(2, '0');
+                    disp.textContent = `${m}:${s}`;
+                    if (t <= 0) { clearInterval(timerInterval); disp.textContent = "¡VOTACIÓN!"; }
+                }, 1000);
+            }
     </script>
 
 </body>
