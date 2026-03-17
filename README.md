@@ -28,4 +28,8 @@
 * **Socket.io:** Comunicación bidireccional mediante WebSockets para la sincronización de las salas multijugador en tiempo real.
 * **Render:** Plataforma de despliegue para el servidor.
 
+![Licencia](https://img.shields.io/badge/license-MIT-blue.svg)
+![Javascript](https://img.shields.io/badge/language-Javascript-yellow.svg)
+![HTML/CSS](https://img.shields.io/badge/style-HTML%2FCSS-orange.svg)
+
 ---
