@@ -212,7 +212,7 @@
         </div>
 
         <div class="footer">
-            Creado por <a href="https://www.linkedin.com/in/angel-luis-iamandi-02b558383/" target="_blank">Ángel</a>
+            Creado por <a href="https://www.linkedin.com/in/%C3%A1ngel-luis-iamandi-02b558383/" target="_blank">Ángel</a>
         </div>
 
     </div>
@@ -314,7 +314,6 @@
             if (!myName || !myRoom) return alert("Faltan datos");
 
             try {
-                // 1. Pedimos la URL a nuestra mini-API de Vercel
                 const response = await fetch('/api/get-config');
                 const config = await response.json();
                 const BACKEND_URL = config.backendUrl;
@@ -323,7 +322,6 @@
                     throw new Error("La URL del backend no está configurada en Vercel");
                 }
 
-                // 2. Conectamos con la URL obtenida
                 socket = io(BACKEND_URL, {
                     transports: ['websocket', 'polling']
                 });
